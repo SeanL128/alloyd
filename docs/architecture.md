@@ -79,11 +79,20 @@ vice versa.
 
 ### Statusline cache hook (built)
 
-Register the hook in Claude Code's `settings.json`:
+`alloyd setup` registers `scripts/claude-statusline.mjs` as the Claude Code
+statusline command (backing up `settings.json` first). A pre-existing
+statusline is wrapped, not replaced: its command is passed base64-encoded via
+`--wrap`, it keeps rendering exactly as before, and alloyd only caches the
+usage payload in front of it. An unrecognized `statusLine` shape is left
+untouched and the Claude side degrades to static policy.
 
-```json
-{ "statusLine": { "type": "command", "command": "node /ABSOLUTE/PATH/to/alloyd/scripts/claude-statusline.mjs" } }
-```
+The cache write is additive and monotone: unknown top-level keys and windows
+missing from the incoming payload survive the rewrite, and within one reset
+window (same `resets_at`) only a higher `used_percentage` wins — a payload
+with an older `resets_at` is a stale previous-window render (an idle Claude
+Code window re-rendering hours-old data) and is ignored. The merge baseline
+is snapshotted before any wrapped statusline runs, since wrapped scripts may
+write the same cache file.
 
 The hook fails soft: malformed input or a cache-write error leaves Claude Code's
 statusline running and preserves the prior cache.
