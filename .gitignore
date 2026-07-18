@@ -1,0 +1,6 @@
+node_modules/
+.claude/settings.local.json
+LAUNCH.md
+CLAUDE.md
+AGENTS.md
+docs/runbooks/

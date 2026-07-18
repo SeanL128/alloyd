@@ -1,0 +1,27 @@
+{
+  "name": "alloyd",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local router that load-balances one workload across the user's own Claude and ChatGPT subscriptions, respecting each provider's limits.",
+  "bin": {
+    "alloyd": "dist/main.js"
+  },
+  "scripts": {
+    "compile": "tsc -p tsconfig.build.json",
+    "test": "node --test src/*.test.ts",
+    "driver": "node src/cli.ts",
+    "mcp": "node src/mcp.ts"
+  },
+  "engines": {
+    "node": ">=23.6"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
+  }
+}

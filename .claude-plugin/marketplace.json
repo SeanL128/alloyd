@@ -1,0 +1,15 @@
+{
+  "name": "alloyd",
+  "owner": {
+    "name": "Sean Lindsay"
+  },
+  "description": "Always-on cross-vendor router: spread substantial work across Claude and ChatGPT subscriptions so neither meter maxes out. MCP dispatch tool + enforcement hook + ambient instructions — no workflow skills.",
+  "plugins": [
+    {
+      "name": "alloyd",
+      "source": "./",
+      "description": "Always-on cross-vendor router: spread substantial work across Claude and ChatGPT subscriptions so neither meter maxes out. MCP dispatch tool + enforcement hook + ambient instructions — no workflow skills.",
+      "version": "0.1.0"
+    }
+  ]
+}

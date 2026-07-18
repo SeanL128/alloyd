@@ -1,0 +1,11 @@
+{
+  "name": "alloyd",
+  "description": "Always-on cross-vendor router: spread substantial work across Claude and ChatGPT subscriptions so neither meter maxes out. MCP dispatch tool + enforcement hook + ambient instructions — no workflow skills.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Sean Lindsay",
+    "email": "seanlindsay2008@gmail.com"
+  },
+  "license": "MIT",
+  "mcpServers": "./.mcp.json"
+}

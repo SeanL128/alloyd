@@ -1,0 +1,47 @@
+{
+  "_note": "Default role/tier map shipped with alloyd. Calibrated 2026-07-17 from published benchmarks (Artificial Analysis, DeepSWE, LiveBench) \u2014 full dataset + derivation in docs/calibration/benchmark-data.md. The planner/builder/reviewer roles are ILLUSTRATIVE STARTING EXAMPLES, not a required set \u2014 roles are user-defined aliases over (band, effort) points; rename/replace them freely (the config-setup skill personalizes them). Every role's model MUST appear in a band so cross-vendor failover can substitute an equal-caliber tier. Edit freely \u2014 nothing here is baked into code. Dispatch templates are user-editable but must keep the {model}, {effort}, and {prompt} placeholders.",
+  "roles": {
+    "planner": {
+      "vendor": "claude",
+      "model": "claude-sonnet-5",
+      "effort": "high"
+    },
+    "builder": {
+      "vendor": "codex",
+      "model": "gpt-5.6-sol",
+      "effort": "medium"
+    },
+    "reviewer": {
+      "vendor": "claude",
+      "model": "claude-opus-4-8",
+      "effort": "high"
+    }
+  },
+  "bands": [
+    {
+      "name": "frontier",
+      "models": {
+        "claude": "claude-opus-4-8",
+        "codex": "gpt-5.6-sol"
+      }
+    },
+    {
+      "name": "value",
+      "models": {
+        "claude": "claude-sonnet-5",
+        "codex": "gpt-5.6-terra"
+      }
+    },
+    {
+      "name": "cheap",
+      "models": {
+        "claude": "claude-haiku-4-5-20251001",
+        "codex": "gpt-5.6-luna"
+      }
+    }
+  ],
+  "dispatch": {
+    "claude": "claude -p --model {model} --effort {effort} {prompt}",
+    "codex": "codex exec --skip-git-repo-check --sandbox workspace-write -m {model} -c model_reasoning_effort={effort} {prompt}"
+  }
+}
