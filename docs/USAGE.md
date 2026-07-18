@@ -28,6 +28,17 @@ starts cold), so it must be self-contained: goal, files, constraints, and
 acceptance criteria. `--dry-run` prints the resolved route and command without
 executing it.
 
+A grounding pack (a capped repo file map) is appended to every dispatch prompt
+so the cold subagent gets exact paths up front; set `ALLOYD_NO_GROUNDING=1` to
+disable it. Dispatched CLIs run with JSON output (`--output-format json` /
+`--json` in the dispatch templates) and alloyd extracts the final message, so
+the result reads like a subagent's report rather than a raw terminal dump.
+
+Via the MCP tool, `dispatch` also accepts `background: true`: it returns a
+`job-N` id immediately and the work runs detached — poll it with the
+`dispatch_result` tool. Use this to fan out independent work units in parallel
+instead of blocking on each dispatch.
+
 ## alloyd setup
 
 Wires up everything it can on both vendors and prints the few steps it cannot
