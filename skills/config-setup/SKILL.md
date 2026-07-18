@@ -29,6 +29,11 @@ shipped config are illustrative examples, not a taxonomy.
 
 - Config path: `$ALLOYD_CONFIG` if set, else `config/default.json` in
   the alloyd repo.
+- The resolved config path may be an indirection symlink (e.g. an
+  `active.json` pointing at the mode's real file). Check with `ls -la`
+  and always edit the real target file — editing tools may refuse
+  symlinks, and replacing one with a plain file silently breaks
+  mode-switching.
 - Band data: the shipped `config/default.json` bands, set manually from
   published benchmarks (no measured curves — placements rest on the band
   ordering and effort ladder; say so when quoting tradeoffs).

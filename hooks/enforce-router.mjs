@@ -5,10 +5,18 @@ try {
   const raw = ["Bash", "shell", "local_shell"].includes(input?.tool_name) ? input.tool_input?.command : undefined;
   const command = Array.isArray(raw) ? raw.join(" ") : raw;
 
+  // Match only actual invocations (start of a command segment, after optional
+  // env-var assignments) — not mentions of the CLIs in grep patterns, file
+  // content, or heredocs quoted mid-line. Segment starts: line start, ; & |,
+  // $( or backtick substitution.
+  // ponytail: misses wrapper invocations like `xargs codex exec`; tighten if seen
+  const INVOKE =
+    /(?:^|[;&|]|\$\(|`|\n)\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*(?:codex\s+exec\b|claude\s+(?:-p|--print)\b)/;
+
   if (
     typeof command === "string" &&
     !process.env.ALLOYD_DISPATCH &&
-    (/\bcodex\s+exec\b/.test(command) || /\bclaude\s+(?:-p|--print)\b/.test(command))
+    INVOKE.test(command)
   ) {
     console.log(JSON.stringify({
       hookSpecificOutput: {
