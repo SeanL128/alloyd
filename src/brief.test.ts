@@ -36,6 +36,12 @@ test("parseBrief accepts an empty files array", () => {
 test("renderBrief uses the exact dispatch-prompt shape", () => {
   assert.equal(
     renderBrief(BRIEF),
-    "## Goal\nAdd task briefs\n\n## Files\n- src/brief.ts\n- src/brief.test.ts\n\n## Constraints\nZero dependencies\n\n## Acceptance criteria\nTests pass",
+    "## Goal\nAdd task briefs\n\n## Files\n- src/brief.ts\n- src/brief.test.ts\n\nRead the files above first — they are the scope of this task. Only look beyond them if one of them references something not listed here.\n\n## Constraints\nZero dependencies\n\n## Acceptance criteria\nTests pass",
   );
+});
+
+test("renderBrief tells the subagent to locate files itself when none are named", () => {
+  const rendered = renderBrief({ ...BRIEF, files: [] });
+  assert.match(rendered, /## Files\n_\(none specified — locate the relevant files yourself before starting\.\)_/);
+  assert.doesNotMatch(rendered, /Read the files above first/);
 });

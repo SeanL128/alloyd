@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { formatRouteSummary, runDispatch, type DispatchExec } from "./pipeline.ts";
+import { formatRouteSummary, runDispatch } from "./pipeline.ts";
 
 const USAGE = "usage: node src/dispatch-cli.ts <role> --brief <path.json> [--dry-run] [--no-probe]";
 
@@ -32,29 +31,14 @@ try {
 }
 
 const dryRun = args.includes("--dry-run");
-let summaryPrinted = false;
-const streamExec: DispatchExec = (command, options) => {
-  console.log(formatRouteSummary(options.route, options.reason));
-  summaryPrinted = true;
-  const child = spawnSync(command, {
-    cwd: options.cwd,
-    env: options.env,
-    timeout: options.timeout,
-    shell: true,
-    stdio: "inherit",
-  });
-  if (child.error) throw child.error;
-  return { output: "", exitCode: child.status ?? 1 };
-};
-const result = runDispatch({
+const result = await runDispatch({
   role,
   brief,
   dryRun,
   probe: !args.includes("--no-probe"),
-  exec: streamExec,
 });
 
-if (result.route && !summaryPrinted) console.log(formatRouteSummary(result.route, result.reason));
+if (result.route) console.log(formatRouteSummary(result.route, result.reason));
 if (dryRun && result.ok) console.log(result.command);
 if (result.output) process.stdout.write(result.output);
 if (!result.ok) console.error(result.error ?? "dispatch failed");

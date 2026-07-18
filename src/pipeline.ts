@@ -1,8 +1,9 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { closeSync, fstatSync, globSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseBrief, renderBrief } from "./brief.ts";
+import { buildGroundingPack } from "./grounding.ts";
 import { buildDispatch, parseConfig, type Route, type RouterConfig } from "./config.ts";
 import { selectRoute } from "./policy.ts";
 import { verifyVendor, type Preflight } from "./preflight.ts";
@@ -22,8 +23,11 @@ export type DispatchExecOptions = {
   route: Route;
   reason: string;
 };
-export type DispatchExecResult = { output: string; exitCode: number };
-export type DispatchExec = (command: string, options: DispatchExecOptions) => DispatchExecResult;
+// output = combined stdout+stderr for display; stdout alone (when the exec
+// separates the streams) is what extractFinalMessage parses, so vendor stderr
+// can't corrupt the JSON parse.
+export type DispatchExecResult = { output: string; stdout?: string; exitCode: number };
+export type DispatchExec = (command: string, options: DispatchExecOptions) => Promise<DispatchExecResult>;
 export type DispatchResult = {
   ok: boolean;
   route?: Route;
@@ -110,27 +114,77 @@ export function loadConfig(): RouterConfig {
   return parseConfig(json);
 }
 
-function defaultExec(command: string, options: DispatchExecOptions): DispatchExecResult {
-  const child = spawnSync(command, {
+function defaultExec(command: string, options: DispatchExecOptions): Promise<DispatchExecResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, {
     cwd: options.cwd,
     env: options.env,
-    timeout: options.timeout,
     shell: true,
-    encoding: "utf8",
+    });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const output = (): string => `${stdout}${stderr}`;
+    const fail = (error: Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      (error as Error & { output?: string }).output = output();
+      reject(error);
+    };
+    const timeout = setTimeout(() => {
+      child.kill();
+      fail(new Error(`dispatch timed out after ${options.timeout}ms`));
+    }, options.timeout);
+
+    child.stdout.on("data", (chunk: Buffer | string) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on("data", (chunk: Buffer | string) => {
+      stderr += String(chunk);
+    });
+    child.once("error", fail);
+    child.once("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve({ output: output(), stdout, exitCode: code ?? 1 });
+    });
   });
-  const output = `${child.stdout ?? ""}${child.stderr ?? ""}`;
-  if (child.error) {
-    (child.error as Error & { output?: string }).output = output;
-    throw child.error;
-  }
-  return { output, exitCode: child.status ?? 1 };
 }
 
 export function formatRouteSummary(route: Route, reason: string): string {
   return `→ ${route.role}: ${route.vendor}/${route.model} (${route.effort}) — ${reason}`;
 }
 
-export function runDispatch(opts: {
+export function extractFinalMessage(vendor: Vendor, text: string): string {
+  try {
+    if (vendor === "claude") {
+      const parsed = JSON.parse(text) as { result?: unknown };
+      return typeof parsed.result === "string" ? parsed.result : text;
+    }
+    let finalMessage: string | undefined;
+    for (const line of text.split("\n")) {
+      if (!line.trim()) continue;
+      const parsed = JSON.parse(line) as {
+        type?: unknown;
+        item?: { type?: unknown; text?: unknown };
+        msg?: { type?: unknown; message?: unknown };
+      };
+      if (parsed.type === "item.completed" && parsed.item?.type === "agent_message" && typeof parsed.item.text === "string") {
+        finalMessage = parsed.item.text;
+      }
+      if (parsed.msg?.type === "agent_message" && typeof parsed.msg.message === "string") {
+        finalMessage = parsed.msg.message;
+      }
+    }
+    return finalMessage ?? text;
+  } catch {
+    return text;
+  }
+}
+
+export type DispatchOptions = {
   role: string;
   brief: unknown;
   dryRun?: boolean;
@@ -138,7 +192,11 @@ export function runDispatch(opts: {
   exec?: DispatchExec;
   usage?: Usage;
   verify?: (vendor: Vendor) => Preflight;
-}): DispatchResult {
+};
+
+export type PreparedDispatch = { route: Route; reason: string; command: string };
+
+export function prepareDispatch(opts: DispatchOptions): DispatchResult | PreparedDispatch {
   let route: Route | undefined;
   let reason = "";
   let command = "";
@@ -157,28 +215,10 @@ export function runDispatch(opts: {
       return { ok: false, route, reason, command, error: preflight.reason, exitCode: 1 };
     }
 
-    command = buildDispatch(config, route, renderBrief(brief));
-    if (opts.dryRun) return { ok: true, route, reason, command, exitCode: 0 };
-
-    const execution = (opts.exec ?? defaultExec)(command, {
-      cwd: process.cwd(),
-      env: { ...process.env, ALLOYD_DISPATCH: "1" },
-      timeout: DISPATCH_TIMEOUT_MS,
-      route,
-      reason,
-    });
-    if (execution.exitCode !== 0) {
-      return {
-        ok: false,
-        route,
-        reason,
-        command,
-        output: execution.output,
-        error: `dispatch command exited with code ${execution.exitCode}`,
-        exitCode: execution.exitCode,
-      };
-    }
-    return { ok: true, route, reason, command, output: execution.output, exitCode: 0 };
+    const pack = buildGroundingPack(process.cwd());
+    const prompt = pack ? `${renderBrief(brief)}\n\n${pack}` : renderBrief(brief);
+    command = buildDispatch(config, route, prompt);
+    return { route, reason, command };
   } catch (error) {
     return {
       ok: false,
@@ -192,4 +232,50 @@ export function runDispatch(opts: {
       exitCode: 1,
     };
   }
+}
+
+function resultFromExecution(prepared: PreparedDispatch, execution: DispatchExecResult): DispatchResult {
+  // Parse the clean stdout when the exec separates it; fall back to combined
+  // output for execs that don't (extractFinalMessage tolerates non-JSON).
+  const output = extractFinalMessage(prepared.route.vendor, execution.stdout ?? execution.output);
+  if (execution.exitCode !== 0) {
+    return {
+      ok: false,
+      ...prepared,
+      output,
+      error: `dispatch command exited with code ${execution.exitCode}`,
+      exitCode: execution.exitCode,
+    };
+  }
+  return { ok: true, ...prepared, output, exitCode: 0 };
+}
+
+export async function executeDispatch(prepared: PreparedDispatch, opts: Pick<DispatchOptions, "exec"> = {}): Promise<DispatchResult> {
+  try {
+    const execution = await (opts.exec ?? defaultExec)(prepared.command, {
+      cwd: process.cwd(),
+      env: { ...process.env, ALLOYD_DISPATCH: "1" },
+      timeout: DISPATCH_TIMEOUT_MS,
+      route: prepared.route,
+      reason: prepared.reason,
+    });
+    return resultFromExecution(prepared, execution);
+  } catch (error) {
+    return {
+      ok: false,
+      ...prepared,
+      error: error instanceof Error ? error.message : String(error),
+      output: error instanceof Error && typeof (error as unknown as { output?: unknown }).output === "string"
+        ? (error as unknown as { output: string }).output
+        : undefined,
+      exitCode: 1,
+    };
+  }
+}
+
+export async function runDispatch(opts: DispatchOptions): Promise<DispatchResult> {
+  const prepared = prepareDispatch(opts);
+  if ("ok" in prepared) return prepared;
+  if (opts.dryRun) return { ok: true, ...prepared, exitCode: 0 };
+  return executeDispatch(prepared, opts);
 }

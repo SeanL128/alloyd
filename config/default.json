@@ -41,7 +41,7 @@
     }
   ],
   "dispatch": {
-    "claude": "claude -p --model {model} --effort {effort} {prompt}",
-    "codex": "codex exec --skip-git-repo-check --sandbox workspace-write -m {model} -c model_reasoning_effort={effort} {prompt}"
+    "claude": "claude -p --output-format json --model {model} --effort {effort} {prompt}",
+    "codex": "codex exec --skip-git-repo-check --sandbox workspace-write --json -m {model} -c model_reasoning_effort={effort} {prompt}"
   }
 }

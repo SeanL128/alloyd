@@ -10,9 +10,11 @@ const codexGlob = join(dir, "sessions", "**", "rollout-*.jsonl");
 const rolloutFile = join(dir, "sessions", "2026", "07", "15", "rollout-x.jsonl");
 const originalClaudeFile = process.env.ALLOYD_CLAUDE_FILE;
 const originalCodexGlob = process.env.ALLOYD_CODEX_GLOB;
+const originalConfig = process.env.ALLOYD_CONFIG;
 
 process.env.ALLOYD_CLAUDE_FILE = claudeFile;
 process.env.ALLOYD_CODEX_GLOB = codexGlob;
+delete process.env.ALLOYD_CONFIG;
 
 // This file has its own node --test process, so these module-level env overrides
 // are set before pipeline.ts is imported and cannot race static imports elsewhere.
@@ -50,12 +52,14 @@ after(() => {
   else process.env.ALLOYD_CLAUDE_FILE = originalClaudeFile;
   if (originalCodexGlob === undefined) delete process.env.ALLOYD_CODEX_GLOB;
   else process.env.ALLOYD_CODEX_GLOB = originalCodexGlob;
+  if (originalConfig === undefined) delete process.env.ALLOYD_CONFIG;
+  else process.env.ALLOYD_CONFIG = originalConfig;
 });
 
-test("routes hot Claude usage to the equal-band Codex model from usage files", () => {
+test("routes hot Claude usage to the equal-band Codex model from usage files", async () => {
   writeUsage(95, 10);
 
-  const result = runDispatch({
+  const result = await runDispatch({
     role: "planner",
     brief: BRIEF,
     dryRun: true,
@@ -72,10 +76,10 @@ test("routes hot Claude usage to the equal-band Codex model from usage files", (
   assert.match(result.command, /gpt-5\.6-terra/);
 });
 
-test("keeps the planner on Claude when both file-backed meters are cool", () => {
+test("keeps the planner on Claude when both file-backed meters are cool", async () => {
   writeUsage(10, 10);
 
-  const result = runDispatch({
+  const result = await runDispatch({
     role: "planner",
     brief: BRIEF,
     dryRun: true,

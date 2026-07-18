@@ -55,6 +55,27 @@ Dispatched work starts **cold** (no conversation context), so the driver must
 write a self-contained **task brief** (goal, files, constraints, acceptance
 criteria) as the dispatch prompt. The router passes the brief verbatim.
 
+**Grounding the cold subagent.** Two levers cut how much a cold dispatch must
+explore before it can work. (1) The rendered brief instructs the subagent to
+read *only* the listed `files` and not re-explore, so a narrow `files` list is
+the strongest lever on dispatch latency. (2) The pipeline appends a capped
+`## Repository map` (`git ls-files`, ≤150 paths / ≤8 KB) built by
+`src/grounding.ts`, giving exact paths without exploration — it complements the
+`CLAUDE.md`/`AGENTS.md` code map each CLI already auto-loads (prose → exact
+paths). Set `ALLOYD_NO_GROUNDING=1` to disable the map.
+
+**Async execution + clean output.** `runDispatch` is async: it splits into a
+synchronous `prepareDispatch` (preflight → select → build command) and an async
+`executeDispatch` (streams the child via `spawn`, never blocking the event loop
+for the 30-min dispatch window). The dispatch templates request structured
+output (`claude -p --output-format json`, `codex exec --json`); the pipeline
+parses the child's **stdout** into a clean final message
+(`extractFinalMessage`), falling back to raw text, so a dispatch returns a
+subagent-style conclusion rather than a terminal blob. The MCP `dispatch` tool
+takes `background: true` to return a `job-N` id immediately and poll it with
+`dispatch_result` — the lever for fanning out independent dispatches without
+serially waiting on each.
+
 ### Live usage awareness
 
 - **Claude side:** Claude Code statusline payload carries first-party
