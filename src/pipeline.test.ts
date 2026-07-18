@@ -26,6 +26,8 @@ Ship MCP
 - src/pipeline.ts
 - src/mcp.ts
 
+Read the files above first — they are the scope of this task. Only look beyond them if one of them references something not listed here.
+
 ## Constraints
 Use the shared pipeline
 
