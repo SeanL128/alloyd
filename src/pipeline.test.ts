@@ -4,8 +4,14 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runDispatch } from "./pipeline.ts";
+import { extractFinalMessage, prepareDispatch, runDispatch } from "./pipeline.ts";
 import type { VendorUsage } from "./usage.ts";
+
+// Grounding injects process.cwd()'s git file-map, which is nondeterministic
+// here (repo contents change). Disable it by default; the two tests below
+// re-enable it explicitly to assert injection and the off-switch.
+process.env.ALLOYD_NO_GROUNDING = "1";
+delete process.env.ALLOYD_CONFIG;
 
 const BRIEF = {
   goal: "Ship MCP",
@@ -19,7 +25,7 @@ const UNKNOWN_USAGE: { claude: VendorUsage; codex: VendorUsage } = {
   codex: { vendor: "codex", windows: [], freshnessTs: 0, stale: true },
 };
 
-const EXPECTED_COMMAND = `codex exec --skip-git-repo-check --sandbox workspace-write -m gpt-5.6-sol -c model_reasoning_effort=medium '## Goal
+const EXPECTED_COMMAND = `codex exec --skip-git-repo-check --sandbox workspace-write --json -m gpt-5.6-sol -c model_reasoning_effort=medium '## Goal
 Ship MCP
 
 ## Files
@@ -34,16 +40,16 @@ Use the shared pipeline
 ## Acceptance criteria
 Tests pass'`;
 
-test("dry run returns the exact command without executing it", () => {
+test("dry run returns the exact command without executing it", async () => {
   let executed = false;
 
-  const result = runDispatch({
+  const result = await runDispatch({
     role: "builder",
     brief: BRIEF,
     dryRun: true,
     usage: UNKNOWN_USAGE,
     verify: () => ({ ok: true, reason: "" }),
-    exec: () => {
+    exec: async () => {
       executed = true;
       return { output: "should not run", exitCode: 0 };
     },
@@ -57,10 +63,10 @@ test("dry run returns the exact command without executing it", () => {
   assert.equal(result.output, undefined);
 });
 
-test("preflight refusal surfaces the reason and skips execution", () => {
+test("preflight refusal surfaces the reason and skips execution", async () => {
   let executed = false;
 
-  const result = runDispatch({
+  const result = await runDispatch({
     role: "builder",
     brief: BRIEF,
     usage: UNKNOWN_USAGE,
@@ -68,7 +74,7 @@ test("preflight refusal surfaces the reason and skips execution", () => {
       ok: false,
       reason: "OPENAI_API_KEY is set — dispatch would bill the API key, not the subscription; unset it",
     }),
-    exec: () => {
+    exec: async () => {
       executed = true;
       return { output: "should not run", exitCode: 0 };
     },
@@ -80,7 +86,7 @@ test("preflight refusal surfaces the reason and skips execution", () => {
   assert.equal(result.error, "OPENAI_API_KEY is set — dispatch would bill the API key, not the subscription; unset it");
 });
 
-test("executed child receives route context, dispatch marker, and execution limits", () => {
+test("executed child receives route context, dispatch marker, and execution limits", async () => {
   let call: {
     command: string;
     cwd: string;
@@ -90,12 +96,12 @@ test("executed child receives route context, dispatch marker, and execution limi
     reason: string;
   } | undefined;
 
-  const result = runDispatch({
+  const result = await runDispatch({
     role: "builder",
     brief: BRIEF,
     usage: UNKNOWN_USAGE,
     verify: () => ({ ok: true, reason: "" }),
-    exec: (command, options) => {
+    exec: async (command, options) => {
       call = {
         command,
         cwd: options.cwd,
@@ -121,13 +127,13 @@ test("executed child receives route context, dispatch marker, and execution limi
   assert.equal(result.exitCode, 0);
 });
 
-test("nonzero child exit is returned without throwing", () => {
-  const result = runDispatch({
+test("nonzero child exit is returned without throwing", async () => {
+  const result = await runDispatch({
     role: "builder",
     brief: BRIEF,
     usage: UNKNOWN_USAGE,
     verify: () => ({ ok: true, reason: "" }),
-    exec: () => ({ output: "failure details\n", exitCode: 7 }),
+    exec: async () => ({ output: "failure details\n", exitCode: 7 }),
   });
 
   assert.equal(result.ok, false);
@@ -136,13 +142,13 @@ test("nonzero child exit is returned without throwing", () => {
   assert.equal(result.exitCode, 7);
 });
 
-test("dispatch failure preserves captured partial output", () => {
-  const result = runDispatch({
+test("dispatch failure preserves captured partial output", async () => {
+  const result = await runDispatch({
     role: "builder",
     brief: BRIEF,
     usage: UNKNOWN_USAGE,
     verify: () => ({ ok: true, reason: "" }),
-    exec: () => {
+    exec: async () => {
       throw Object.assign(new Error("spawn timeout"), { output: "partial…" });
     },
   });
@@ -152,13 +158,13 @@ test("dispatch failure preserves captured partial output", () => {
   assert.equal(result.output, "partial…");
 });
 
-test("dispatch failure without captured output leaves output undefined", () => {
-  const result = runDispatch({
+test("dispatch failure without captured output leaves output undefined", async () => {
+  const result = await runDispatch({
     role: "builder",
     brief: BRIEF,
     usage: UNKNOWN_USAGE,
     verify: () => ({ ok: true, reason: "" }),
-    exec: () => {
+    exec: async () => {
       throw new Error("spawn timeout");
     },
   });
@@ -166,6 +172,53 @@ test("dispatch failure without captured output leaves output undefined", () => {
   assert.equal(result.ok, false);
   assert.match(result.error ?? "", /spawn timeout/);
   assert.equal(result.output, undefined);
+});
+
+test("runDispatch awaits injected execution", async () => {
+  let released = false;
+  const result = await runDispatch({
+    role: "builder",
+    brief: BRIEF,
+    usage: UNKNOWN_USAGE,
+    verify: () => ({ ok: true, reason: "" }),
+    exec: async () => {
+      await Promise.resolve();
+      released = true;
+      return { output: "done", exitCode: 0 };
+    },
+  });
+
+  assert.equal(released, true);
+  assert.equal(result.output, "done");
+});
+
+test("prepareDispatch builds the command without executing it", () => {
+  const prepared = prepareDispatch({
+    role: "builder",
+    brief: BRIEF,
+    usage: UNKNOWN_USAGE,
+    verify: () => ({ ok: true, reason: "" }),
+  });
+
+  assert.ok(!("ok" in prepared));
+  if ("ok" in prepared) return;
+  assert.equal(prepared.command, EXPECTED_COMMAND);
+});
+
+test("extractFinalMessage reads Claude JSON output", () => {
+  assert.equal(extractFinalMessage("claude", '{"result":"final answer"}'), "final answer");
+});
+
+test("extractFinalMessage reads the last Codex agent message from JSONL", () => {
+  const output = [
+    '{"type":"item.completed","item":{"type":"agent_message","text":"first"}}',
+    '{"msg":{"type":"agent_message","message":"final answer"}}',
+  ].join("\n");
+  assert.equal(extractFinalMessage("codex", output), "final answer");
+});
+
+test("extractFinalMessage falls back to non-JSON output", () => {
+  assert.equal(extractFinalMessage("codex", "plain terminal output"), "plain terminal output");
 });
 
 test("dispatch CLI dry run prints the route and command without running the vendor CLI", () => {
@@ -189,7 +242,7 @@ test("dispatch CLI dry run prints the route and command without running the vend
 
     assert.equal(child.status, 0, child.stderr);
     assert.match(child.stdout, /^→ planner: claude\/claude-sonnet-5 \(high\) — usage unknown → static policy\n/);
-    assert.match(child.stdout, /claude -p --model claude-sonnet-5 --effort high/);
+    assert.match(child.stdout, /claude -p --output-format json --model claude-sonnet-5 --effort high/);
     assert.doesNotMatch(child.stderr, /vendor-cli-must-not-run/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -223,5 +276,34 @@ test("MCP stdio server lists dispatch, status, and suggest_role", () => {
   assert.equal(child.status, 0, child.stderr);
   const messages = child.stdout.trim().split("\n").map((line) => JSON.parse(line));
   const listed = messages.find((message) => message.id === 2);
-  assert.deepEqual(listed.result.tools.map((tool: { name: string }) => tool.name), ["dispatch", "status", "suggest_role"]);
+  assert.deepEqual(listed.result.tools.map((tool: { name: string }) => tool.name), ["dispatch", "dispatch_result", "status", "suggest_role"]);
+});
+
+test("dispatch appends the repository-map grounding pack when enabled", async () => {
+  delete process.env.ALLOYD_NO_GROUNDING;
+  try {
+    const result = await runDispatch({
+      role: "builder",
+      brief: BRIEF,
+      dryRun: true,
+      usage: UNKNOWN_USAGE,
+      verify: () => ({ ok: true, reason: "" }),
+    });
+    assert.equal(result.ok, true);
+    assert.match(result.command ?? "", /## Repository map/);
+  } finally {
+    process.env.ALLOYD_NO_GROUNDING = "1";
+  }
+});
+
+test("ALLOYD_NO_GROUNDING omits the grounding pack from the command", async () => {
+  const result = await runDispatch({
+    role: "builder",
+    brief: BRIEF,
+    dryRun: true,
+    usage: UNKNOWN_USAGE,
+    verify: () => ({ ok: true, reason: "" }),
+  });
+  assert.equal(result.ok, true);
+  assert.doesNotMatch(result.command ?? "", /## Repository map/);
 });
