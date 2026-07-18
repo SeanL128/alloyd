@@ -22,9 +22,11 @@ export type DispatchExecOptions = {
   timeout: number;
   route: Route;
   reason: string;
-  onOutput?: (chunk: string) => void;
 };
-export type DispatchExecResult = { output: string; exitCode: number };
+// output = combined stdout+stderr for display; stdout alone (when the exec
+// separates the streams) is what extractFinalMessage parses, so vendor stderr
+// can't corrupt the JSON parse.
+export type DispatchExecResult = { output: string; stdout?: string; exitCode: number };
 export type DispatchExec = (command: string, options: DispatchExecOptions) => Promise<DispatchExecResult>;
 export type DispatchResult = {
   ok: boolean;
@@ -32,7 +34,6 @@ export type DispatchResult = {
   reason: string;
   command: string;
   output?: string;
-  rawOutput?: string;
   error?: string;
   exitCode?: number;
 };
@@ -137,9 +138,7 @@ function defaultExec(command: string, options: DispatchExecOptions): Promise<Dis
     }, options.timeout);
 
     child.stdout.on("data", (chunk: Buffer | string) => {
-      const text = String(chunk);
-      stdout += text;
-      options.onOutput?.(text);
+      stdout += String(chunk);
     });
     child.stderr.on("data", (chunk: Buffer | string) => {
       stderr += String(chunk);
@@ -149,7 +148,7 @@ function defaultExec(command: string, options: DispatchExecOptions): Promise<Dis
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      resolve({ output: output(), exitCode: code ?? 1 });
+      resolve({ output: output(), stdout, exitCode: code ?? 1 });
     });
   });
 }
@@ -158,14 +157,14 @@ export function formatRouteSummary(route: Route, reason: string): string {
   return `→ ${route.role}: ${route.vendor}/${route.model} (${route.effort}) — ${reason}`;
 }
 
-export function extractFinalMessage(vendor: Vendor, rawOutput: string): string {
+export function extractFinalMessage(vendor: Vendor, text: string): string {
   try {
     if (vendor === "claude") {
-      const parsed = JSON.parse(rawOutput) as { result?: unknown };
-      return typeof parsed.result === "string" ? parsed.result : rawOutput;
+      const parsed = JSON.parse(text) as { result?: unknown };
+      return typeof parsed.result === "string" ? parsed.result : text;
     }
     let finalMessage: string | undefined;
-    for (const line of rawOutput.split("\n")) {
+    for (const line of text.split("\n")) {
       if (!line.trim()) continue;
       const parsed = JSON.parse(line) as {
         type?: unknown;
@@ -179,9 +178,9 @@ export function extractFinalMessage(vendor: Vendor, rawOutput: string): string {
         finalMessage = parsed.msg.message;
       }
     }
-    return finalMessage ?? rawOutput;
+    return finalMessage ?? text;
   } catch {
-    return rawOutput;
+    return text;
   }
 }
 
@@ -236,19 +235,19 @@ export function prepareDispatch(opts: DispatchOptions): DispatchResult | Prepare
 }
 
 function resultFromExecution(prepared: PreparedDispatch, execution: DispatchExecResult): DispatchResult {
-  const output = extractFinalMessage(prepared.route.vendor, execution.output);
-  const rawOutput = output === execution.output ? undefined : execution.output;
+  // Parse the clean stdout when the exec separates it; fall back to combined
+  // output for execs that don't (extractFinalMessage tolerates non-JSON).
+  const output = extractFinalMessage(prepared.route.vendor, execution.stdout ?? execution.output);
   if (execution.exitCode !== 0) {
     return {
       ok: false,
       ...prepared,
       output,
-      rawOutput,
       error: `dispatch command exited with code ${execution.exitCode}`,
       exitCode: execution.exitCode,
     };
   }
-  return { ok: true, ...prepared, output, rawOutput, exitCode: 0 };
+  return { ok: true, ...prepared, output, exitCode: 0 };
 }
 
 export async function executeDispatch(prepared: PreparedDispatch, opts: Pick<DispatchOptions, "exec"> = {}): Promise<DispatchResult> {

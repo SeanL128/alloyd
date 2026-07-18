@@ -8,7 +8,9 @@ import { suggestRole } from "./suggest.ts";
 
 const server = new McpServer({ name: "alloyd", version: "0.0.0" });
 
-// ponytail: in-memory job table, lost on MCP server restart; persist to disk if that ever matters.
+// ponytail: in-memory job table — grows unbounded and is lost on server restart.
+// Fine for a per-session server; add an age/size sweep or disk persistence if
+// MCP servers ever get long-lived.
 type BackgroundJob = { promise: Promise<DispatchResult>; result?: DispatchResult; startedAt: number; role: string };
 const jobs = new Map<string, BackgroundJob>();
 let nextJob = 1;
@@ -38,14 +40,16 @@ server.registerTool(
   "dispatch",
   {
     title: "Dispatch Alloyd Task",
-    description: "Route a structured task brief to the selected subscription-authenticated vendor CLI; set background for result polling.",
+    description: "Route a structured task brief to the selected subscription-authenticated vendor CLI. Keep the `files` list narrow — it is the subagent's grounding scope and the strongest lever on dispatch speed. Set background for result polling.",
     inputSchema: z.object({
       role: z.string(),
       brief: z.object({
-        goal: z.string(),
-        files: z.array(z.string()),
-        constraints: z.string(),
-        acceptance: z.string(),
+        goal: z.string().describe("What the dispatched work unit must accomplish, self-contained."),
+        files: z.array(z.string()).describe(
+          "The minimal set of files the task touches. The narrower this list, the faster the subagent grounds — name exact paths rather than leaving it broad. Empty only when the files genuinely cannot be known up front.",
+        ),
+        constraints: z.string().describe("Boundaries the work must respect — what not to change, style, invariants."),
+        acceptance: z.string().describe("How to tell the work is done and correct."),
       }),
       dry_run: z.boolean().optional(),
       background: z.boolean().optional(),

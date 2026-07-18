@@ -31,7 +31,6 @@ try {
 }
 
 const dryRun = args.includes("--dry-run");
-let summaryPrinted = false;
 const result = await runDispatch({
   role,
   brief,
@@ -39,7 +38,7 @@ const result = await runDispatch({
   probe: !args.includes("--no-probe"),
 });
 
-if (result.route && !summaryPrinted) console.log(formatRouteSummary(result.route, result.reason));
+if (result.route) console.log(formatRouteSummary(result.route, result.reason));
 if (dryRun && result.ok) console.log(result.command);
 if (result.output) process.stdout.write(result.output);
 if (!result.ok) console.error(result.error ?? "dispatch failed");

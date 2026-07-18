@@ -221,6 +221,25 @@ test("extractFinalMessage falls back to non-JSON output", () => {
   assert.equal(extractFinalMessage("codex", "plain terminal output"), "plain terminal output");
 });
 
+test("extractFinalMessage falls back when Claude result is not a string", () => {
+  assert.equal(extractFinalMessage("claude", '{"result":42}'), '{"result":42}');
+});
+
+test("dispatch extracts the final message from stdout, ignoring stderr in combined output", async () => {
+  const stdout = '{"msg":{"type":"agent_message","message":"final answer"}}';
+  const result = await runDispatch({
+    role: "builder",
+    brief: BRIEF,
+    usage: UNKNOWN_USAGE,
+    verify: () => ({ ok: true, reason: "" }),
+    // Combined output has trailing stderr noise that is not JSON; extraction
+    // must read stdout only, or JSON.parse throws and collapses to raw.
+    exec: async () => ({ output: `${stdout}\nWARN: codex wrote to stderr\n`, stdout, exitCode: 0 }),
+  });
+
+  assert.equal(result.output, "final answer");
+});
+
 test("dispatch CLI dry run prints the route and command without running the vendor CLI", () => {
   const dir = mkdtempSync(join(tmpdir(), "alloyd-cli-"));
   try {
