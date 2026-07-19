@@ -30,7 +30,14 @@ npm install -g github:SeanL128/alloyd
 alloyd setup
 ```
 
-`alloyd setup` wires up the Codex side, the usage-cache hook, and the ambient rule in your CLAUDE.md for you, then prints the few remaining steps it cannot do itself (installing the Claude Code plugin, which registers the `dispatch` MCP tool and enforcement hook, and approving Codex's one-time hook trust prompt). Every file setup modifies is backed up first as `<file>.bak.<timestamp>`, and an existing statusline keeps rendering exactly as before, since alloyd only caches the usage payload in front of it. After that, run `alloyd` any time to see which CLI should drive your session, and the routing itself happens ambiently as you work. Requires macOS or Linux and Node 23.6+, with the Claude Code and Codex CLIs installed and signed in on subscription auth (API-key auth is refused by design).
+In Claude Code, install the plugin:
+
+```text
+/plugin marketplace add SeanL128/alloyd
+/plugin install alloyd@alloyd
+```
+
+`alloyd setup` wires up the Codex side, the usage-cache hook, and the ambient rule in your CLAUDE.md for you, then prints the few remaining steps it cannot do itself (installing the Claude Code plugin, which registers the `dispatch` MCP tool and enforcement hook, and approving Codex's one-time hook trust prompt). Every file setup modifies is backed up first as `<file>.bak.<timestamp>`, and an existing statusline keeps rendering exactly as before, since alloyd only caches the usage payload in front of it. After that, run `alloyd` any time to see which CLI should drive your session, and the routing itself happens ambiently as you work. Requires macOS or Linux and Node 24+ (or 23.6+), with the Claude Code and Codex CLIs installed and signed in on subscription auth (API-key auth is refused by design).
 
 ## Configuration
 

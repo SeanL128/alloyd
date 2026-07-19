@@ -54,7 +54,12 @@ Handled for you: the Claude Code statusline cache hook in
 Codex side (`~/.codex/AGENTS.md` rule, MCP server registration in
 `config.toml`, enforcement hook in `hooks.json`, and the config-setup skill).
 Left for you: installing the Claude Code plugin and approving Codex's one-time
-hook trust prompt.
+hook trust prompt. In Claude Code, run:
+
+```text
+/plugin marketplace add SeanL128/alloyd
+/plugin install alloyd@alloyd
+```
 
 ## alloyd update
 

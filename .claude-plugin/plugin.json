@@ -1,6 +1,6 @@
 {
   "name": "alloyd",
-  "description": "Always-on cross-vendor router: spread substantial work across Claude and ChatGPT subscriptions so neither meter maxes out. MCP dispatch tool + enforcement hook + ambient instructions — no workflow skills.",
+  "description": "Always-on cross-vendor router: spread substantial work across Claude and ChatGPT subscriptions so work goes to the subscription with more headroom. MCP dispatch tool + enforcement hook + ambient instructions — no workflow skills.",
   "version": "0.1.0",
   "author": {
     "name": "Sean Lindsay",
