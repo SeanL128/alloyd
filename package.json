@@ -1,6 +1,6 @@
 {
   "name": "alloyd",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Local router that load-balances one workload across the user's own Claude and ChatGPT subscriptions, respecting each provider's limits.",
