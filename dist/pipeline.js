@@ -205,6 +205,17 @@ function resultFromExecution(prepared, execution) {
             exitCode: execution.exitCode,
         };
     }
+    if (output.trim() === "") {
+        // A SIGTERM-killed codex exec exits 0 with empty stdout; an empty final
+        // message is never a useful success, so surface it as a failure.
+        return {
+            ok: false,
+            ...prepared,
+            output,
+            error: "dispatch exited 0 but produced no final message (killed or crashed silently?)",
+            exitCode: 1,
+        };
+    }
     return { ok: true, ...prepared, output, exitCode: 0 };
 }
 export async function executeDispatch(prepared, opts = {}) {

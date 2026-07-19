@@ -31470,6 +31470,15 @@ function resultFromExecution(prepared, execution) {
       exitCode: execution.exitCode
     };
   }
+  if (output.trim() === "") {
+    return {
+      ok: false,
+      ...prepared,
+      output,
+      error: "dispatch exited 0 but produced no final message (killed or crashed silently?)",
+      exitCode: 1
+    };
+  }
   return { ok: true, ...prepared, output, exitCode: 0 };
 }
 async function executeDispatch(prepared, opts = {}) {

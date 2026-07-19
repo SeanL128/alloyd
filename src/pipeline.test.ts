@@ -142,6 +142,20 @@ test("nonzero child exit is returned without throwing", async () => {
   assert.equal(result.exitCode, 7);
 });
 
+test("zero exit with empty output is reported as failure", async () => {
+  const result = await runDispatch({
+    role: "builder",
+    brief: BRIEF,
+    usage: UNKNOWN_USAGE,
+    verify: () => ({ ok: true, reason: "" }),
+    exec: async () => ({ output: "", exitCode: 0 }),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "dispatch exited 0 but produced no final message (killed or crashed silently?)");
+  assert.equal(result.exitCode, 1);
+});
+
 test("dispatch failure preserves captured partial output", async () => {
   const result = await runDispatch({
     role: "builder",
