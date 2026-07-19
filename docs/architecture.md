@@ -200,8 +200,13 @@ stay-with-warn rather than a failed dispatch.
 
 ## Distribution
 
-Claude Code distribution is a local marketplace plugin: add the marketplace,
-install `alloyd`, then register the statusline cache hook described above.
+Claude Code distribution is a marketplace plugin (GitHub or local path): add
+the marketplace, install `alloyd`, then register the statusline cache hook
+described above. The plugin's `.mcp.json` launches `dist/mcp.bundle.js`, an
+esbuild-bundled dependency-free copy of the MCP server, because a marketplace
+clone has no `node_modules`; regenerate it with `npm run bundle` when server
+code changes and bump the plugin version, since installed copies are cached by
+version.
 The plugin registers the `dispatch` MCP tool and its Bash PreToolUse enforcement
 hook; `plugin-assets/CLAUDE-snippet.md` is the ambient-rule copy-paste for a
 user's CLAUDE.md. Publishing the marketplace is deliberately manual and is not
