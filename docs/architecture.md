@@ -238,8 +238,12 @@ dispatched work continues to run in the user's real environment.
   is ambient.
 - **Mandatory planning/approval ceremony around dispatches** Cut;
   may return later as an *optional* quality mode, but nothing depends on it.
-- **Fable 5 as a routable tier** Moving to API-only, so it cannot
-  draw from a subscription meter. (Mythos 5 also excluded — gated/invite-only.)
+- **Fable 5 in the shipped default bands** Fable 5 is now a permanent
+  subscription model, but only on Max/Enterprise plans, so the shipped
+  `config/default.json` stays plan-universal; the config-setup skill applies
+  the plan-gated Fable band variant (see the Fable 5 recalibration section in
+  `docs/calibration/benchmark-data.md`). (Mythos 5 still excluded —
+  gated/invite-only.)
 - **Heuristic inline-work detection** The enforcement hook can only
   intercept the dispatch path; inline leakage is accepted and mitigated only by
   ambient instructions. No detection machinery is planned.

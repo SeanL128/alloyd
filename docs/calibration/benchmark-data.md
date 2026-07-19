@@ -13,7 +13,8 @@ ground-truth scored).
 "Non-reasoning" = thinking off). `~` = estimated from a chart with no printed
 value. Models relevant to alloyd's bands: Claude Opus 4.8 / Sonnet 5 /
 Haiku 4.5; GPT-5.6 Sol / Terra / Luna. Claude Fable 5 rows are kept for
-reference but are not a routable subscription tier in alloyd's config.
+reference and are routable only on Claude Max and Enterprise plans; the
+config-setup skill applies that plan-gated variant.
 
 **Duplicate screenshots (no separate tables kept):** `SCR-…-ogou`, `-ohpr`,
 `-ojux`, `-ojxz`, `-okex`, `-okpq` are scatter views recombining data already
@@ -393,6 +394,32 @@ Mid-range latency/E2E label pairings (staggered chart labels) are best-effort.
 
 # Derived calibration (2026-07-17)
 
+## Fable 5 recalibration (2026-07-18)
+
+The shipped `config/default.json` remains universal: Opus ↔ Sol frontier,
+Sonnet ↔ Terra value, Haiku ↔ Luna cheap. The config-setup skill asks for the
+Claude plan and, on Max or Enterprise, applies the Fable variant below; Fable
+5 is a plan feature, not additional capacity.
+
+- **Frontier: Fable 5 ↔ Sol.** Replace frontier's Claude model with
+  `claude-fable-5`; Fable's Intelligence Index 60 vs Sol's 59, GDPval 1760 vs
+  1743, and Coding Agent Index 77 vs 80 keep them in the same band. Opus 4.8
+  (Intelligence 56) no longer pairs with Sol when Fable is available.
+- **deep-review: Claude-only Opus 4.8.** Add
+  `{ claude: claude-opus-4-8 }` so Opus-based roles remain valid under
+  `parseConfig`. It is deliberately unpaired: `substitute()` reports an
+  unpaired band; `selectRoute` stays on Claude with its warning.
+- **Reviewer stays Opus by default.** Keep `claude-opus-4-8/high`: its
+  hallucination rate is 36% vs Fable's 55%, and it burns less Claude meter
+  ($1.80/7.4m per task vs Fable's $2.75/5.0m; Fable's in-harness coding time is
+  23.4m). Present `claude-fable-5/high` as the pricier reviewer alternative.
+- **Pro and Team remain unchanged.** Do not add Fable: their shipped bands are
+  Opus ↔ Sol, Sonnet ↔ Terra, and Haiku ↔ Luna, and a Fable dispatch would
+  fail on those plans.
+- **Builder failover improves on Max and Enterprise.** When Codex is hot,
+  `gpt-5.6-sol/medium` substitutes to `claude-fable-5/medium` (DeepSWE 65% vs
+  Sol's 61%), replacing the Opus-medium fallback at 49%.
+
 ## Band validation — bands CONFIRMED as configured
 
 - **frontier: opus-4.8 ↔ sol.** Intelligence 56 vs 59, coding-agent 73 vs 80,
@@ -442,4 +469,5 @@ are level.
 - Strongest signals for routing: DeepSWE (full effort ladders both vendors,
   cost+tokens per row), AA Coding/Agentic indices, GDPval Elo, and the
   operational table (§13) for meter-burn reasoning.
-- Fable 5 rows: reference ceiling only; alloyd routes subscription tiers.
+- Fable 5 is routable only through the config-setup Max/Enterprise variant;
+  the shipped default remains plan-universal.

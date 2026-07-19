@@ -37,10 +37,21 @@ shipped config are illustrative examples, not a taxonomy.
 - Band data: the shipped `config/default.json` bands, set manually from
   published benchmarks (no measured curves — placements rest on the band
   ordering and effort ladder; say so when quoting tradeoffs).
+- Before proposing bands, ask which Claude plan the user has: Pro/Team or
+  Max/Enterprise. Fable 5 is dispatchable only on Max/Enterprise. For
+  Max/Enterprise, offer the Fable variant: replace frontier's Claude model
+  with `claude-fable-5` and add the Claude-only `deep-review` band
+  `{ claude: claude-opus-4-8 }` to keep Opus-based roles valid; flag
+  `deep-review` as unpaired under step 4. For Pro/Team, keep shipped bands and
+  do not add Fable — dispatch would fail. For reviewer roles, keep Opus by
+  default and show `claude-fable-5/high` as the pricier alternative under
+  step 3's tradeoff pattern.
 
 ## Scenario A — first-time setup
 
-1. Ask whether the user wants data-informed proposals (opt-in): with
+1. Ask the user's Claude plan before proposing bands; on Max/Enterprise,
+   include the Fable variant above. Then ask whether the user wants
+   data-informed proposals (opt-in): with
    consent, read recent activity — Claude side `~/.claude/usage-status.json`
    and recent session transcripts; Codex side recent
    `~/.codex/sessions/**/rollout-*.jsonl`. Look for: how often work is
@@ -69,6 +80,8 @@ shipped config are illustrative examples, not a taxonomy.
 1. Identify the new model(s): ask, and/or read what the CLIs know (Codex
    `~/.codex/models_cache.json` if present; `claude --help`/docs for the
    Claude list). Auto-detection is a nicety — asking is fine.
+   Ask the user's Claude plan before proposing Fable bands: use the Fable
+   variant above only on Max/Enterprise; Pro/Team keep shipped bands.
 2. Place the new model from published benchmarks: pull the alloyd
    project's latest released bands (git pull of the repo / plugin update)
    or reason from public benchmark results, slot the new model in, and
