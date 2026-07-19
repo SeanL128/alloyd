@@ -18,11 +18,14 @@ export function parseBrief(input) {
     return brief;
 }
 export function renderBrief(brief) {
+    const files = brief.files.length > 0
+        ? `${brief.files.map((file) => `- ${file}`).join("\n")}\n\nRead the files above first — they are the scope of this task. Only look beyond them if one of them references something not listed here.`
+        : "_(none specified — locate the relevant files yourself before starting.)_";
     return `## Goal
 ${brief.goal}
 
 ## Files
-${brief.files.map((file) => `- ${file}`).join("\n")}
+${files}
 
 ## Constraints
 ${brief.constraints}

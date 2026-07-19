@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { formatRouteSummary, runDispatch } from "./pipeline.js";
 const USAGE = "usage: node src/dispatch-cli.ts <role> --brief <path.json> [--dry-run] [--no-probe]";
@@ -28,29 +27,13 @@ catch (error) {
     fail(error instanceof Error ? error.message : String(error));
 }
 const dryRun = args.includes("--dry-run");
-let summaryPrinted = false;
-const streamExec = (command, options) => {
-    console.log(formatRouteSummary(options.route, options.reason));
-    summaryPrinted = true;
-    const child = spawnSync(command, {
-        cwd: options.cwd,
-        env: options.env,
-        timeout: options.timeout,
-        shell: true,
-        stdio: "inherit",
-    });
-    if (child.error)
-        throw child.error;
-    return { output: "", exitCode: child.status ?? 1 };
-};
-const result = runDispatch({
+const result = await runDispatch({
     role,
     brief,
     dryRun,
     probe: !args.includes("--no-probe"),
-    exec: streamExec,
 });
-if (result.route && !summaryPrinted)
+if (result.route)
     console.log(formatRouteSummary(result.route, result.reason));
 if (dryRun && result.ok)
     console.log(result.command);

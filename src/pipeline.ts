@@ -121,6 +121,9 @@ function defaultExec(command: string, options: DispatchExecOptions): Promise<Dis
     env: options.env,
     shell: true,
     });
+    // codex exec waits for stdin EOF ("Reading additional input from stdin...")
+    // and hangs until the dispatch timeout if the pipe stays open.
+    child.stdin.end();
     let stdout = "";
     let stderr = "";
     let settled = false;

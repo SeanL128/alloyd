@@ -1,8 +1,9 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { closeSync, fstatSync, globSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseBrief, renderBrief } from "./brief.js";
+import { buildGroundingPack } from "./grounding.js";
 import { buildDispatch, parseConfig } from "./config.js";
 import { selectRoute } from "./policy.js";
 import { verifyVendor } from "./preflight.js";
@@ -88,24 +89,75 @@ export function loadConfig() {
     return parseConfig(json);
 }
 function defaultExec(command, options) {
-    const child = spawnSync(command, {
-        cwd: options.cwd,
-        env: options.env,
-        timeout: options.timeout,
-        shell: true,
-        encoding: "utf8",
+    return new Promise((resolve, reject) => {
+        const child = spawn(command, {
+            cwd: options.cwd,
+            env: options.env,
+            shell: true,
+        });
+        // codex exec waits for stdin EOF ("Reading additional input from stdin...")
+        // and hangs until the dispatch timeout if the pipe stays open.
+        child.stdin.end();
+        let stdout = "";
+        let stderr = "";
+        let settled = false;
+        const output = () => `${stdout}${stderr}`;
+        const fail = (error) => {
+            if (settled)
+                return;
+            settled = true;
+            clearTimeout(timeout);
+            error.output = output();
+            reject(error);
+        };
+        const timeout = setTimeout(() => {
+            child.kill();
+            fail(new Error(`dispatch timed out after ${options.timeout}ms`));
+        }, options.timeout);
+        child.stdout.on("data", (chunk) => {
+            stdout += String(chunk);
+        });
+        child.stderr.on("data", (chunk) => {
+            stderr += String(chunk);
+        });
+        child.once("error", fail);
+        child.once("close", (code) => {
+            if (settled)
+                return;
+            settled = true;
+            clearTimeout(timeout);
+            resolve({ output: output(), stdout, exitCode: code ?? 1 });
+        });
     });
-    const output = `${child.stdout ?? ""}${child.stderr ?? ""}`;
-    if (child.error) {
-        child.error.output = output;
-        throw child.error;
-    }
-    return { output, exitCode: child.status ?? 1 };
 }
 export function formatRouteSummary(route, reason) {
     return `→ ${route.role}: ${route.vendor}/${route.model} (${route.effort}) — ${reason}`;
 }
-export function runDispatch(opts) {
+export function extractFinalMessage(vendor, text) {
+    try {
+        if (vendor === "claude") {
+            const parsed = JSON.parse(text);
+            return typeof parsed.result === "string" ? parsed.result : text;
+        }
+        let finalMessage;
+        for (const line of text.split("\n")) {
+            if (!line.trim())
+                continue;
+            const parsed = JSON.parse(line);
+            if (parsed.type === "item.completed" && parsed.item?.type === "agent_message" && typeof parsed.item.text === "string") {
+                finalMessage = parsed.item.text;
+            }
+            if (parsed.msg?.type === "agent_message" && typeof parsed.msg.message === "string") {
+                finalMessage = parsed.msg.message;
+            }
+        }
+        return finalMessage ?? text;
+    }
+    catch {
+        return text;
+    }
+}
+export function prepareDispatch(opts) {
     let route;
     let reason = "";
     let command = "";
@@ -121,28 +173,10 @@ export function runDispatch(opts) {
         if (!preflight.ok) {
             return { ok: false, route, reason, command, error: preflight.reason, exitCode: 1 };
         }
-        command = buildDispatch(config, route, renderBrief(brief));
-        if (opts.dryRun)
-            return { ok: true, route, reason, command, exitCode: 0 };
-        const execution = (opts.exec ?? defaultExec)(command, {
-            cwd: process.cwd(),
-            env: { ...process.env, ALLOYD_DISPATCH: "1" },
-            timeout: DISPATCH_TIMEOUT_MS,
-            route,
-            reason,
-        });
-        if (execution.exitCode !== 0) {
-            return {
-                ok: false,
-                route,
-                reason,
-                command,
-                output: execution.output,
-                error: `dispatch command exited with code ${execution.exitCode}`,
-                exitCode: execution.exitCode,
-            };
-        }
-        return { ok: true, route, reason, command, output: execution.output, exitCode: 0 };
+        const pack = buildGroundingPack(process.cwd());
+        const prompt = pack ? `${renderBrief(brief)}\n\n${pack}` : renderBrief(brief);
+        command = buildDispatch(config, route, prompt);
+        return { route, reason, command };
     }
     catch (error) {
         return {
@@ -157,4 +191,50 @@ export function runDispatch(opts) {
             exitCode: 1,
         };
     }
+}
+function resultFromExecution(prepared, execution) {
+    // Parse the clean stdout when the exec separates it; fall back to combined
+    // output for execs that don't (extractFinalMessage tolerates non-JSON).
+    const output = extractFinalMessage(prepared.route.vendor, execution.stdout ?? execution.output);
+    if (execution.exitCode !== 0) {
+        return {
+            ok: false,
+            ...prepared,
+            output,
+            error: `dispatch command exited with code ${execution.exitCode}`,
+            exitCode: execution.exitCode,
+        };
+    }
+    return { ok: true, ...prepared, output, exitCode: 0 };
+}
+export async function executeDispatch(prepared, opts = {}) {
+    try {
+        const execution = await (opts.exec ?? defaultExec)(prepared.command, {
+            cwd: process.cwd(),
+            env: { ...process.env, ALLOYD_DISPATCH: "1" },
+            timeout: DISPATCH_TIMEOUT_MS,
+            route: prepared.route,
+            reason: prepared.reason,
+        });
+        return resultFromExecution(prepared, execution);
+    }
+    catch (error) {
+        return {
+            ok: false,
+            ...prepared,
+            error: error instanceof Error ? error.message : String(error),
+            output: error instanceof Error && typeof error.output === "string"
+                ? error.output
+                : undefined,
+            exitCode: 1,
+        };
+    }
+}
+export async function runDispatch(opts) {
+    const prepared = prepareDispatch(opts);
+    if ("ok" in prepared)
+        return prepared;
+    if (opts.dryRun)
+        return { ok: true, ...prepared, exitCode: 0 };
+    return executeDispatch(prepared, opts);
 }
