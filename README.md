@@ -53,12 +53,17 @@ Dispatch defaults to the MCP tool because models invoke tools more reliably than
 
 More in [docs/USAGE.md](docs/USAGE.md).
 
+## Known limitations
+
+Claude usage data is refreshed by a statusline hook that only runs in the Claude Code **CLI**. Sessions in the desktop/web app don't update the cache, so after app-only use the Claude meter goes stale and the router falls back to treating Claude headroom as unknown (it will keep driving with Codex until a CLI session refreshes it). A refresh path that doesn't depend on the CLI statusline is planned.
+
 ## Roadmap
 
 - [x] Routing core with usage-aware policy and cross-vendor failover
 - [x] MCP dispatch server plus the `alloyd` CLI (status, dispatch, setup)
 - [x] Claude Code plugin and scripted Codex setup, each with an enforcement hook
 - [x] Benchmark-derived default bands and efforts
+- [ ] Claude usage refresh that works outside the CLI (app sessions currently leave the meter stale)
 - [ ] Native Windows support (platform-aware dispatch quoting)
 - [ ] Thin CLI launcher that renders the official CLIs' streamed events
 
